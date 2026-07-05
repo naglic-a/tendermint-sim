@@ -5,7 +5,7 @@ pub type Height = u64;
 pub type Round = u32;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct Value {
+pub struct Value { // Newtype pattern, for better type safety
     pub data: String,
 }
 
@@ -38,3 +38,37 @@ pub enum Message {
     Proposal(Proposal),
     Vote(Vote),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Step {
+    Propose,
+    Prevote,
+    Precommit,
+}
+
+#[derive(Debug, Clone)]
+pub enum PlRequest {
+    // <pl, Send | dest, msg>
+    Send {
+        dest: NodeId,
+        msg: Message,
+    },
+    // <beb, Broadcast | msg>
+    Broadcast {
+        msg: Message,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    PlDeliver {
+        src: NodeId,
+        msg: Message,
+    },
+    ProposeValue(Value),
+    Timeout {
+        round: Round,
+        step: Step,
+    }
+}
+
