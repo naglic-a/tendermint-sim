@@ -2,7 +2,7 @@ use serde::de;
 
 use crate::types::{Event, PlRequest, Message, NodeId, Height, Round, Step, Value, Proposal, Vote, VoteType};
 use std::collections::HashMap;
-
+use std::time::Duration;
 pub struct ConsensusState {
     id: NodeId, 
     height: Height,
@@ -169,5 +169,51 @@ impl ConsensusState {
         }
         
         None 
+    }
+
+    pub fn timeout_duration(&self) -> Duration {
+        let base_duration = match self.step {
+            Step::Propose => 3000,
+            Step::Prevote => 2000,
+            Step::Precommit => 2000,
+        };
+        
+        let extra = (self.round as u64) * 500;
+        Duration::from_millis(base_duration + extra)
+    }
+
+    pub fn handle_timeout(&mut self) -> Option<PlRequest> {
+        match self.step {
+            Step::Propose => {
+                self.step = Step::Prevote;
+                
+                let vote = Vote {
+                    vote_type: VoteType::Prevote,
+                    height: self.height,
+                    round: self.round,
+                    value: None, // Nil vote
+                    sender: self.id,
+                };
+                
+                Some(PlRequest::Broadcast { msg: Message::Vote(vote) })
+            }
+            Step::Prevote => {
+                self.step = Step::Precommit;
+                
+                let vote = Vote {
+                    vote_type: VoteType::Precommit,
+                    height: self.height,
+                    round: self.round,
+                    value: None, // Nil vote
+                    sender: self.id,
+                };
+                
+                Some(PlRequest::Broadcast { msg: Message::Vote(vote) })
+            }
+            Step::Precommit => {
+                let next_round = self.round + 1;
+                self.start_round(next_round)
+            }
+        }
     }
 }

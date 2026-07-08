@@ -1,6 +1,7 @@
 use crate::types::{PlRequest, Event, Message, NodeId};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
+use std::hash::Hash;
 use tokio::net::TcpListener;
 use std::collections::HashSet;
 use sha2::{Sha256, Digest};
@@ -14,7 +15,9 @@ pub struct PerfectLink {
     event_sender: mpsc::Sender<Event>, 
     internal_receiver: mpsc::Receiver<Vec<u8>>,
 
-    peers: HashMap<NodeId, OwnedWriteHalf>,
+    peer_addresses: HashMap<NodeId, String>,
+    active_sockets: HashMap<NodeId, OwnedWriteHalf>,
+
     seen_messages: HashSet<String>,
 }
 
@@ -23,15 +26,31 @@ impl PerfectLink {
         request_receiver: mpsc::Receiver<PlRequest>,
         event_sender: mpsc::Sender<Event>,
         internal_receiver: mpsc::Receiver<Vec<u8>>,
-        peers: HashMap<NodeId, OwnedWriteHalf>,
-        seen_messages: HashSet<String>,
+        peer_addresses: HashMap<NodeId, String>,
     ) -> Self {
         PerfectLink {
             request_receiver,
             event_sender,
             internal_receiver,
-            peers,
-            seen_messages,
+            peer_addresses,
+            active_sockets: HashMap::new(), 
+            seen_messages: HashSet::new(),
+        }
+    }
+
+    async fn send_to_peer(&mut self, dest: NodeId, raw_bytes: &[u8]) {
+        if !self.active_sockets.contains_key(&dest) {
+            let Some(addr) = self.peer_addresses.get(&dest) else { return; };
+            let Ok(stream) = tokio::net::TcpStream::connect(addr).await else { return; };
+            let (_, write_half) = stream.into_split();
+            self.active_sockets.insert(dest, write_half);   
+        }
+
+        let Some(peer_socket) = self.active_sockets.get_mut(&dest) else { return; };
+        
+        let len = raw_bytes.len() as u32;
+        if peer_socket.write_u32(len).await.is_err() || peer_socket.write_all(raw_bytes).await.is_err() {
+            self.active_sockets.remove(&dest);
         }
     }
 
@@ -41,33 +60,22 @@ impl PerfectLink {
                 Some(request) = self.request_receiver.recv() => {
                     match request {
                         PlRequest::Send { dest, msg } => {
-                            if let Some(peer_socket) = self.peers.get_mut(&dest) {
-                                let raw_bytes = serde_json::to_vec(&msg).unwrap();
-                                let len = raw_bytes.len() as u32;
-
-                                let _ = peer_socket.write_u32(len).await;
-                                let _ = peer_socket.write_all(&raw_bytes).await;
-                            }
+                            let raw_bytes = serde_json::to_vec(&msg).unwrap();
+                            self.send_to_peer(dest, &raw_bytes).await;
                         }
                         PlRequest::Broadcast { msg } => {
                             let raw_bytes = serde_json::to_vec(&msg).unwrap();
-                            let len = raw_bytes.len() as u32;
-
-                            for(node_id, peer_socket) in self.peers.iter_mut() {
-                                let _ = peer_socket.write_u32(len).await;
-                                let _ = peer_socket.write_all(&raw_bytes).await;
+                            // clone the keys so we don't borrow self while calling self.send_to_peer
+                            let peers: Vec<NodeId> = self.peer_addresses.keys().cloned().collect();
+                            for node_id in peers {
+                                self.send_to_peer(node_id, &raw_bytes).await;
                             }
                         }
                     }
                 }
 
                 Some(raw_bytes) = self.internal_receiver.recv() => {
-                    // TODO : 1. Compute SHA-256 hash of the raw_bytes
-                    // TODO : 2. If its allready in self.seen_messages, do nothing
-                    // TODO: 3. if its new, add hash to self.seen_messages
-                    // TODO: 4. Deserialize the raw_bytes into a Message
-                    // TODO: 5. Forwared the message to the consensus layer by sending an Event::PlDeliver to self.event_sender
-                    // TODO: 6. Broadcast the message to all other nodes by sending an Event::PlDeliver to self.event_sender
+
                     let mut hasher = Sha256::new();
                     hasher.update(&raw_bytes);
                     let hash_result = hasher.finalize().iter().map(|b| format!("{:02x}", b)).collect::<String>();
@@ -92,16 +100,16 @@ impl PerfectLink {
                     self.event_sender.send(Event::PlDeliver { src, msg }).await.unwrap();
                     
                     let len = raw_bytes.len() as u32;
-                    for(node_id, peer_socket) in self.peers.iter_mut() {
-                        let _ = peer_socket.write_u32(len).await;
-                        let _ = peer_socket.write_all(&raw_bytes).await;
+                    let peers: Vec<NodeId> = self.peer_addresses.keys().cloned().collect();
+                    for node_id in peers {
+                        self.send_to_peer(node_id, &raw_bytes).await;
                     }
                 }
             }
         }
     }   
 
-    pub async fn start_listener(&self, port: u16, internal_sender: mpsc::Sender<Vec<u8>>) {
+    pub async fn start_listener(port: u16, internal_sender: mpsc::Sender<Vec<u8>>) {
         let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await.unwrap();  
 
         tokio::spawn(async move {
@@ -111,9 +119,7 @@ impl PerfectLink {
 
                 tokio::spawn(async move {
                     loop {
-                        // TODO : 1. Read Bytes from the socket
-                        // TODO : 2. Send the bytes to the brain
-                        // internall_seender.send(buf).await.unwrap();
+
                         let len = match socket.read_u32().await {
                             Ok(l) => l as usize,
                             Err(_) => break, // Connection closed or error occurred

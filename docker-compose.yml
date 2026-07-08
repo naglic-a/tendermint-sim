@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  node0:
+    build: .
+    environment:
+      - NODE_ID=0
+      - TOTAL_NODES=4
+      - PEERS=1:node1:8000,2:node2:8000,3:node3:8000
+    networks:
+      - tm-net
+
+  node1:
+    build: .
+    environment:
+      - NODE_ID=1
+      - TOTAL_NODES=4
+      - PEERS=0:node0:8000,2:node2:8000,3:node3:8000
+    networks:
+      - tm-net
+
+  node2:
+    build: .
+    environment:
+      - NODE_ID=2
+      - TOTAL_NODES=4
+      - PEERS=0:node0:8000,1:node1:8000,3:node3:8000
+    networks:
+      - tm-net
+
+  node3:
+    build: .
+    environment:
+      - NODE_ID=3
+      - TOTAL_NODES=4
+      - PEERS=0:node0:8000,1:node1:8000,2:node2:8000
+    networks:
+      - tm-net
+
+networks:
+  tm-net:
+    driver: bridge
