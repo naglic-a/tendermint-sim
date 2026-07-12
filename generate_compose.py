@@ -14,9 +14,13 @@ for i in range(NUM_NODES):
         peers.append(f"{target}:node{target}:{target_port}")
     
     peers_str = ",".join(peers)
-    
+    if(i < 15):
+        behaviour = "double-vote"
+    else:
+        behaviour = "standard"
     services[f"node{i}"] = {
         "build": ".",
+        "image": "tendermint-sim-image",
         "environment": [
             f"NODE_ID={i}",
             f"TOTAL_NODES={NUM_NODES}",
@@ -28,7 +32,6 @@ for i in range(NUM_NODES):
     }
 
 compose = {
-    "version": "3.8",
     "services": services,
     "networks": {
         "tm-net": {

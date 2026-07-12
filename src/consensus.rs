@@ -184,9 +184,9 @@ impl ConsensusState {
 
                 if count >= quorum_size && self.step == Step::Precommit {
                     if let Some(decided_value) = &vote.value {
-                        info!("\n[Node {}] *** BLOCK COMMITTED ***", self.id);
-                        info!("    Height: {}", self.height);
-                        info!("    Value:  '{}'\n", decided_value.data);
+                        info!("[Node {}] *** BLOCK COMMITTED ***", self.id);
+                        info!("                Height: {}", self.height);
+                        info!("                Value:  '{}'\n", decided_value.data);
                         self.height += 1;
                         // fresh height
                         self.locked_round = None;
