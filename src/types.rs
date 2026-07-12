@@ -72,3 +72,11 @@ pub enum Event {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Behavior {
+    Standard,
+    Silent,
+    DoubleVote,
+    SendInvalid,
+}
+

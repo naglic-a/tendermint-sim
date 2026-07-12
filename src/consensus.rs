@@ -1,6 +1,6 @@
-use serde::de;
+use tracing::info;
 
-use crate::types::{Event, PlRequest, Message, NodeId, Height, Round, Step, Value, Proposal, Vote, VoteType};
+use crate::types::{PlRequest, Message, NodeId, Height, Round, Step, Value, Proposal, Vote, VoteType, Behavior};
 use std::collections::HashMap;
 use std::time::Duration;
 pub struct ConsensusState {
@@ -15,6 +15,7 @@ pub struct ConsensusState {
     proposal: Option<Proposal>,
     votes: HashMap<Round, RoundVote>,
     total_nodes: u32,
+    pub behavior: Behavior,
 }
 
 pub struct RoundVote {
@@ -23,7 +24,7 @@ pub struct RoundVote {
 }
 
 impl ConsensusState {
-    pub fn new(id: NodeId, total_nodes: u32) -> Self {
+    pub fn new(id: NodeId, total_nodes: u32, behavior: Behavior) -> Self {
         ConsensusState {
             id,
             height: 1,
@@ -36,10 +37,13 @@ impl ConsensusState {
             proposal: None,
             votes: HashMap::new(),
             total_nodes,
+            behavior,
         }
     }
 
     pub fn start_round(&mut self, round: Round) -> Option<PlRequest> {
+        if self.behavior == Behavior::Silent { return None; }
+
         self.round = round;
         self.step = Step::Propose;
         self.proposal = None;
@@ -48,8 +52,18 @@ impl ConsensusState {
             precommits: HashMap::new(),
         });
 
+        info!("---------------------------------------------------------");
+        info!("[Node {}] Starting Height: {}, Round: {}", self.id, self.height, self.round);
+        info!("---------------------------------------------------------");
+
         if self.get_proposer() == self.id {
-            let value_to_propose = self.valid_value.clone().unwrap_or(Value { data: "New Block".to_string() });
+            let mut value_to_propose = self.valid_value.clone().unwrap_or(Value { data: "New Block".to_string() });
+            
+            if self.behavior == Behavior::SendInvalid {
+                value_to_propose = Value { data: "MALICIOUS BLOCK".to_string() };
+            }
+
+            info!("[Node {}] [PROPOSER] I am the proposer for Height {}, Round {}. Proposing value: '{}'", self.id, self.height, self.round, value_to_propose.data);
         
             let proposal = Proposal {
                 height: self.height,
@@ -70,6 +84,8 @@ impl ConsensusState {
     }
 
     pub fn handle_proposal(&mut self, proposal: Proposal) -> Option<PlRequest> {
+        if self.behavior == Behavior::Silent { return None; }
+
         if self.step != Step::Propose || proposal.round != self.round || proposal.height != self.height {
             return None;
         }
@@ -82,6 +98,20 @@ impl ConsensusState {
         
         if let Some(locked) = &self.locked_value {
             if locked != &proposal.value {
+                vote_value = None;
+            }
+        }
+
+        if let Some(vr) = proposal.valid_round {
+            let quorum_size: usize = ((self.total_nodes * 2) / 3 + 1) as usize;
+            
+            let has_quorum = self.votes.get(&vr).map(|rv| {
+                rv.prevotes.values()
+                    .filter(|v| v.value == Some(proposal.value.clone()))
+                    .count() >= quorum_size
+            }).unwrap_or(false);
+
+            if !has_quorum {
                 vote_value = None;
             }
         }
@@ -101,6 +131,8 @@ impl ConsensusState {
     }
 
     pub fn handle_vote(&mut self, vote: Vote) -> Option<PlRequest> {
+        if self.behavior == Behavior::Silent { return None; }
+
         if vote.height != self.height || vote.round != self.round {
             return None;
         }
@@ -121,8 +153,9 @@ impl ConsensusState {
                     .count();
 
                 if count >= quorum_size && self.step == Step::Prevote {
-                    // TODO logs
-                    // TODO update locks, -> Precommit, and return precommit braodcast
+                    let val_str = vote.value.as_ref().map(|v| v.data.clone()).unwrap_or_else(|| "NIL".to_string());
+                    info!("[Node {}] [PREVOTE QUORUM] Reached ({} votes) for value: '{}'. Moving to Precommit step.", self.id, count, val_str);
+                    
                     if vote.value.is_some() {
                         self.locked_value = vote.value.clone();
                         self.locked_round = Some(vote.round);
@@ -150,8 +183,10 @@ impl ConsensusState {
                     .count();
 
                 if count >= quorum_size && self.step == Step::Precommit {
-                    // TODO logs
                     if let Some(decided_value) = &vote.value {
+                        info!("\n[Node {}] *** BLOCK COMMITTED ***", self.id);
+                        info!("    Height: {}", self.height);
+                        info!("    Value:  '{}'\n", decided_value.data);
                         self.height += 1;
                         // fresh height
                         self.locked_round = None;
@@ -161,8 +196,9 @@ impl ConsensusState {
 
                         return self.start_round(0);
                     } else {
+                        info!("[Node {}] [PRECOMMIT NIL] Quorum reached for NIL. Network failed to agree. Moving to Round {}.", self.id, self.round + 1);
                         let next_round = self.round + 1;
-                        return  self.start_round(next_round);
+                        return self.start_round(next_round);
                     }
                }
             } 
@@ -183,6 +219,8 @@ impl ConsensusState {
     }
 
     pub fn handle_timeout(&mut self) -> Option<PlRequest> {
+        if self.behavior == Behavior::Silent { return None; }
+
         match self.step {
             Step::Propose => {
                 self.step = Step::Prevote;

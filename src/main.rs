@@ -2,19 +2,17 @@ pub mod consensus;
 pub mod types;
 pub mod perfect_link;
 
-use crate::types::{Event, PlRequest, Message, Proposal, Value};
+use crate::types::{Event, PlRequest, Message, Value, Behavior};
 use crate::perfect_link::PerfectLink;
 use tokio::sync::mpsc;
-use tokio::net::TcpStream;
-use tokio::io::AsyncWriteExt;
-use std::collections::{HashMap, HashSet};
-use tracing::{info, Level};
+use std::collections::HashMap;
+use tracing::info;
 use std::env;
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     info!("Test Test Test");
 
@@ -43,7 +41,7 @@ async fn main() {
     let(internal_sender, internal_receiver) = mpsc::channel(100);
 
     let port: u16 = (8000 + node_id) as u16;
-    PerfectLink::start_listener(port, internal_sender.clone());
+    PerfectLink::start_listener(port, internal_sender.clone()).await;
 
     let mut perfect_link = PerfectLink::new(
         req_receiver,
@@ -57,7 +55,16 @@ async fn main() {
         perfect_link.run().await;
     });
     
-    let mut consensus = consensus::ConsensusState::new(node_id, total_nodes);
+    let behavior_str = env::var("BEHAVIOR").unwrap_or_else(|_| "standard".to_string());
+    let behavior = match behavior_str.to_lowercase().as_str() {
+        "silent" => Behavior::Silent,
+        "double-vote" => Behavior::DoubleVote,
+        "send-invalid" => Behavior::SendInvalid,
+        _ => Behavior::Standard,
+    };
+    info!("Node ID: {}, Behavior: {:?}", node_id, behavior);
+
+    let mut consensus = consensus::ConsensusState::new(node_id, total_nodes, behavior.clone());
     
     if let Some(req) = consensus.start_round(0) {
         req_sender.send(req).await.unwrap();
@@ -69,7 +76,7 @@ async fn main() {
     loop {
         tokio::select! {
             Some(event) = event_receiver.recv() => {
-                info!("Node {} received event: {:?}", node_id, event);
+                tracing::debug!("Node {} received event: {:?}", node_id, event);
                 
                 let maybe_req = match event {
                     Event::PlDeliver { msg: Message::Proposal(p), .. } => consensus.handle_proposal(p),
@@ -78,15 +85,37 @@ async fn main() {
                 };
 
                 if let Some(req) = maybe_req {
+                    if behavior == Behavior::DoubleVote {
+                        if let PlRequest::Broadcast { msg: Message::Vote(ref v) } = req {
+                            req_sender.send(req.clone()).await.unwrap();
+                            let mut evil_vote = v.clone();
+                            evil_vote.value = Some(Value { data: "EVIL DOUBLE VOTE".to_string() });
+                            req_sender.send(PlRequest::Broadcast { msg: Message::Vote(evil_vote) }).await.unwrap();
+                            sleep_timer.as_mut().reset(tokio::time::Instant::now() + consensus.timeout_duration());
+                            continue;
+                        }
+                    }
+
                     req_sender.send(req).await.unwrap();
                     sleep_timer.as_mut().reset(tokio::time::Instant::now() + consensus.timeout_duration());
                 }
             }
 
             _ = &mut sleep_timer => {
-                info!("Node {} timed out, transitioning step...", node_id);
+                tracing::debug!("Node {} timed out, transitioning step...", node_id);
                 
                 if let Some(req) = consensus.handle_timeout() {
+                    if behavior == Behavior::DoubleVote {
+                        if let PlRequest::Broadcast { msg: Message::Vote(ref v) } = req {
+                            req_sender.send(req.clone()).await.unwrap();
+                            let mut evil_vote = v.clone();
+                            evil_vote.value = Some(Value { data: "EVIL DOUBLE VOTE".to_string() });
+                            req_sender.send(PlRequest::Broadcast { msg: Message::Vote(evil_vote) }).await.unwrap();
+                            sleep_timer.as_mut().reset(tokio::time::Instant::now() + consensus.timeout_duration());
+                            continue;
+                        }
+                    }
+
                     req_sender.send(req).await.unwrap();
                 }
                 

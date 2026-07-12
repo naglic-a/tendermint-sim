@@ -1,7 +1,6 @@
 use crate::types::{PlRequest, Event, Message, NodeId};
 use tokio::sync::mpsc;
 use std::collections::HashMap;
-use std::hash::Hash;
 use tokio::net::TcpListener;
 use std::collections::HashSet;
 use sha2::{Sha256, Digest};
@@ -99,7 +98,7 @@ impl PerfectLink {
 
                     self.event_sender.send(Event::PlDeliver { src, msg }).await.unwrap();
                     
-                    let len = raw_bytes.len() as u32;
+                    let _len = raw_bytes.len() as u32;
                     let peers: Vec<NodeId> = self.peer_addresses.keys().cloned().collect();
                     for node_id in peers {
                         self.send_to_peer(node_id, &raw_bytes).await;
