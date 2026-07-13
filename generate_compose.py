@@ -18,15 +18,31 @@ for i in range(NUM_NODES):
         behaviour = "double-vote"
     else:
         behaviour = "standard"
+    # Add the monitor service first
+    if i == 0:
+        services["monitor"] = {
+            "build": {
+                "context": ".",
+                "dockerfile": "Dockerfile.monitor"
+            },
+            "ports": [
+                "8080:8080",
+                "8081:8081"
+            ],
+            "networks": ["tm-net"]
+        }
+
     services[f"node{i}"] = {
         "build": ".",
         "image": "tendermint-sim-image",
+        "cap_add": ["NET_ADMIN"],
         "environment": [
             f"NODE_ID={i}",
             f"TOTAL_NODES={NUM_NODES}",
             f"PEERS={peers_str}",
-            "RUST_LOG=info", # Changed from debug to info to keep logs readable
-            "BEHAVIOR=standard"
+            "RUST_LOG=info",
+            f"BEHAVIOR={behaviour}",
+            "LATENCY_MS=500"
         ],
         "networks": ["tm-net"]
     }

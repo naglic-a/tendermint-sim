@@ -4,10 +4,10 @@ use crate::types::{PlRequest, Message, NodeId, Height, Round, Step, Value, Propo
 use std::collections::HashMap;
 use std::time::Duration;
 pub struct ConsensusState {
-    id: NodeId, 
-    height: Height,
-    round: Round,
-    step: Step,
+    pub id: NodeId, 
+    pub height: Height,
+    pub round: Round,
+    pub step: Step,
     locked_value: Option<Value>,
     locked_round: Option<Round>,
     valid_value: Option<Value>,
@@ -57,7 +57,8 @@ impl ConsensusState {
         info!("---------------------------------------------------------");
 
         if self.get_proposer() == self.id {
-            let mut value_to_propose = self.valid_value.clone().unwrap_or(Value { data: "New Block".to_string() });
+            let default_block = format!("Block Data for Height {}", self.height);
+            let mut value_to_propose = self.valid_value.clone().unwrap_or(Value { data: default_block });
             
             if self.behavior == Behavior::SendInvalid {
                 value_to_propose = Value { data: "MALICIOUS BLOCK".to_string() };

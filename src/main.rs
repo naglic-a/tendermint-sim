@@ -14,7 +14,6 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    info!("Test Test Test");
 
     let node_id_str = env::var("NODE_ID").expect("NODE_ID environment variable not set");
     let node_id: u32 = node_id_str.parse().expect("NODE_ID must be a number");
@@ -73,6 +72,9 @@ async fn main() {
     let sleep_timer = tokio::time::sleep(consensus.timeout_duration());
     tokio::pin!(sleep_timer);
 
+    let telemetry_socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    let monitor_addr = "monitor:9000";
+
     loop {
         tokio::select! {
             Some(event) = event_receiver.recv() => {
@@ -122,5 +124,11 @@ async fn main() {
                 sleep_timer.as_mut().reset(tokio::time::Instant::now() + consensus.timeout_duration());
             }
         }
+        
+        let telemetry_json = format!(
+            r#"{{"id": {}, "height": {}, "round": {}, "step": "{:?}"}}"#, 
+            node_id, consensus.height, consensus.round, consensus.step
+        );
+        let _ = telemetry_socket.send_to(telemetry_json.as_bytes(), monitor_addr).await;
     }
 }
