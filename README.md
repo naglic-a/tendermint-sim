@@ -36,7 +36,15 @@ Prior to deployment, generate the network topology and configuration manifests:
 ```bash
 python3 generate_compose.py
 ```
-*Note: This script can be manually edited to customize the total number of nodes, the density of the peer-to-peer gossip graph, artificial latency delays, and specific Byzantine fault assignments.*
+**Customization Options:**
+You can manually edit the Python script to test different scenarios. The following configurations are natively supported:
+- `num_nodes`: The total number of nodes in the cluster (e.g., `50`).
+- `latency_ms`: Artificial network delay per hop in milliseconds (e.g., `500`).
+- `behaviour`: The string determining a node's Byzantine fault logic. Supported values are:
+  - `"standard"`: Honest node execution.
+  - `"double-vote"`: Maliciously casts an extra vote for an invalid block to disrupt quorum.
+  - `"silent"`: Simulates a crashed node by ignoring all incoming packets and refusing to broadcast.
+  - `"send-invalid"`: Maliciously acts as a proposer for invalid block payloads.
 
 ### 2. Compilation and Initialization
 Build the master container image and initialize the cluster. The Rust compiler executes within a multi-stage Dockerfile. To prevent your system from attempting to compile Rust for all nodes simultaneously, explicitly build the image for the first node (the rest will automatically clone it):
