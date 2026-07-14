@@ -45,6 +45,7 @@ You can manually edit the Python script to test different scenarios. The followi
   - `"double-vote"`: Maliciously casts an extra vote for an invalid block to disrupt quorum.
   - `"silent"`: Simulates a crashed node by ignoring all incoming packets and refusing to broadcast.
   - `"send-invalid"`: Maliciously acts as a proposer for invalid block payloads.
+- `rust_log`: `debug` for logs for every event/message, `info` for only state transitions,round starts, etc. 
 
 ### 2. Compilation and Initialization
 Build the master container image and initialize the cluster. The Rust compiler executes within a multi-stage Dockerfile. To prevent your system from attempting to compile Rust for all nodes simultaneously, explicitly build the image for the first node (the rest will automatically clone it):
