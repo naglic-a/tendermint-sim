@@ -1,7 +1,7 @@
 # Tendermint Consensus Simulator
 
 ## Overview
-This repository contains a distributed simulation of the Tendermint Byzantine Fault Tolerant (BFT) consensus algorithm. The system executes in a fully containerized environment, simulating the state machine transitions of an arbitrary, highly-scalable number of validator nodes communicating over a sparse gossip network. The network topology and scale can be easily customized via the provided Python generator.
+This repository contains a distributed simulation of the Tendermint consensus algorithm. The system executes in a fully containerized environment, simulating the state machine transitions of an arbitrary, highly-scalable number of validator nodes communicating over a sparse gossip network. The network topology and scale can be easily customized via the provided Python generator.
 
 ## System Architecture
 
@@ -22,19 +22,19 @@ This repository contains a distributed simulation of the Tendermint Byzantine Fa
 ## Key Features
 - **Byzantine Fault Injection**: Supports simulating malicious actors (e.g., `DoubleVote`, `Silent`, `SendInvalid`) to observe the robust $2f+1$ quorum resilience.
 - **Artificial Network Latency**: Integrates Linux Traffic Control (`tc` via `iproute2`) to inject artificial packet delay directly at the container's ethernet interface, making it easy to observe consensus dynamics under slow-network conditions.
-- **Dependency Isolation**: The entire infrastructure, including the monitoring stack and web server, is 100% encapsulated within Docker Compose.
+- **Dependency Isolation**: Everything is inside docker.
 
 ## Deployment Instructions
 
 ### Prerequisites
 - Docker Engine
 - Docker Compose (v2 with `buildx` is highly recommended)
-- Python 3 (required only for generating the initial topology)
+- Python (required only for generating the initial topology)
 
 ### 1. Topology Generation
 Prior to deployment, generate the network topology and configuration manifests:
 ```bash
-python3 generate_compose.py
+python generate_compose.py
 ```
 **Customization Options:**
 You can manually edit the Python script to test different scenarios. The following configurations are natively supported:
@@ -54,7 +54,7 @@ docker compose up -d
 ```
 
 ### 3. Monitoring and Visualization
-Once the containers are actively computing consensus, the telemetry server will automatically begin bridging UDP packets. Open a modern web browser and navigate to the local presentation layer:
+Once the containers are actively computing consensus, the telemetry server will automatically begin bridging UDP packets. Open a web browser and navigate to the local presentation layer:
 
 **http://localhost:8080**
 
