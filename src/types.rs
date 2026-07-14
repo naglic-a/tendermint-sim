@@ -44,6 +44,7 @@ pub enum Step {
     Propose,
     Prevote,
     Precommit,
+    Commit,
 }
 
 #[derive(Debug, Clone)]

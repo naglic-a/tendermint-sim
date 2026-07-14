@@ -188,14 +188,8 @@ impl ConsensusState {
                         info!("[Node {}] *** BLOCK COMMITTED ***", self.id);
                         info!("                Height: {}", self.height);
                         info!("                Value:  '{}'\n", decided_value.data);
-                        self.height += 1;
-                        // fresh height
-                        self.locked_round = None;
-                        self.locked_value = None;
-                        self.valid_round = None;
-                        self.valid_value = None;
-
-                        return self.start_round(0);
+                        self.step = Step::Commit;
+                        return None;
                     } else {
                         info!("[Node {}] [PRECOMMIT NIL] Quorum reached for NIL. Network failed to agree. Moving to Round {}.", self.id, self.round + 1);
                         let next_round = self.round + 1;
@@ -213,8 +207,15 @@ impl ConsensusState {
             Step::Propose => 3000,
             Step::Prevote => 2000,
             Step::Precommit => 2000,
+            Step::Commit => {
+                let timeout = std::env::var("COMMIT_TIMEOUT")
+                    .unwrap_or_else(|_| "1000".to_string())
+                    .parse()
+                    .unwrap_or(1000);
+                return Duration::from_millis(timeout);
+            }
         };
-        // TODO add timeout for commit, so slow nodes can catch up
+        
         let extra = (self.round as u64) * 500;
         Duration::from_millis(base_duration + extra)
     }
@@ -251,7 +252,17 @@ impl ConsensusState {
             }
             Step::Precommit => {
                 let next_round = self.round + 1;
-                self.start_round(next_round)
+                Some(self.start_round(next_round)?)
+            }
+            Step::Commit => {
+                self.height += 1;
+                // fresh height
+                self.locked_round = None;
+                self.locked_value = None;
+                self.valid_round = None;
+                self.valid_value = None;
+
+                self.start_round(0)
             }
         }
     }

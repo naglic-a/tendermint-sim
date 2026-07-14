@@ -80,11 +80,15 @@ async fn main() {
             Some(event) = event_receiver.recv() => {
                 tracing::debug!("Node {} received event: {:?}", node_id, event);
                 
+                let old_step = consensus.step.clone();
+
                 let maybe_req = match event {
                     Event::PlDeliver { msg: Message::Proposal(p), .. } => consensus.handle_proposal(p),
                     Event::PlDeliver { msg: Message::Vote(v), .. } => consensus.handle_vote(v),
                     _ => None,
                 };
+
+                let mut reset_timer = old_step != consensus.step;
 
                 if let Some(req) = maybe_req {
                     if behavior == Behavior::DoubleVote {
@@ -99,6 +103,10 @@ async fn main() {
                     }
 
                     req_sender.send(req).await.unwrap();
+                    reset_timer = true;
+                }
+
+                if reset_timer {
                     sleep_timer.as_mut().reset(tokio::time::Instant::now() + consensus.timeout_duration());
                 }
             }
