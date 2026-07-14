@@ -17,7 +17,7 @@ This repository contains a distributed simulation of the Tendermint Byzantine Fa
 
 3. **Presentation Layer (HTML/JS/CSS)**
    - A real-time, browser-based dashboard.
-   - Visually maps the state of the 50-node cluster, providing immediate feedback on quorum progression and Byzantine fault disruptions.
+   - Visually maps the state of up to 56-node cluster, providing immediate feedback on quorum progression and Byzantine fault disruptions.
 
 ## Key Features
 - **Byzantine Fault Injection**: Supports simulating malicious actors (e.g., `DoubleVote`, `Silent`, `SendInvalid`) to observe the robust $2f+1$ quorum resilience.

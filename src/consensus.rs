@@ -214,7 +214,7 @@ impl ConsensusState {
             Step::Prevote => 2000,
             Step::Precommit => 2000,
         };
-        
+        // TODO add timeout for commit, so slow nodes can catch up
         let extra = (self.round as u64) * 500;
         Duration::from_millis(base_duration + extra)
     }

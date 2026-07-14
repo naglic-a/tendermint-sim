@@ -1,24 +1,30 @@
 import yaml
+import random
 
-NUM_NODES = 50
-PEERS_OUT = 3 # Each node connects to 3 other nodes(GOSSIP)
+NUM_NODES = 56
+PEERS_OUT = 7
 
 services = {}
 
 for i in range(NUM_NODES):
     peers = []
-    # Connect to the next PEERS_OUT nodes to guarantee a connected topology
     for j in range(1, PEERS_OUT + 1):
         target = (i + j) % NUM_NODES
         target_port = 8000 + target
         peers.append(f"{target}:node{target}:{target_port}")
     
     peers_str = ",".join(peers)
-    if(i < 15):
+    behaviour = "standard"
+    
+    if i in [9, 37]:
         behaviour = "double-vote"
-    else:
-        behaviour = "standard"
-    # Add the monitor service first
+    if i in [18, 46]:
+        behaviour = "send-invalid"
+    if i in [27, 55]:
+        behaviour = "silent"
+
+    latency = random.randint(100, 300)
+    
     if i == 0:
         services["monitor"] = {
             "build": {
@@ -42,7 +48,7 @@ for i in range(NUM_NODES):
             f"PEERS={peers_str}",
             "RUST_LOG=info",
             f"BEHAVIOR={behaviour}",
-            "LATENCY_MS=500"
+            f"LATENCY_MS={latency}"
         ],
         "networks": ["tm-net"]
     }
